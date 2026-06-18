@@ -1,0 +1,48 @@
+name: Windows 11 Pro RDP - Direct Public IP
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Download dan Install QEMU + ISO Windows 11
+      run: |
+        choco install qemu -y
+        Invoke-WebRequest -Uri "https://software-static.download.prss.microsoft.com/dbn/Win11_23H2_English_x64v2.iso" -OutFile "win11.iso"
+        & "C:\Program Files\qemu\qemu-img.exe" create -f qcow2 win11.qcow2 100G
+      shell: pwsh
+
+    - name: Mengaktifkan RDP & Buka Jalur Firewall Publik
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        
+        # Bikin Akun Login RDP
+        net user mabar P@ssword2026 /add
+        net localgroup administrators mabar /add
+        net localgroup "Remote Desktop Users" mabar /add
+      shell: pwsh
+
+    - name: Ambil IP Publik Angka & Booting Windows 11
+      run: |
+        # Mengambil IP Publik asli dari VM GitHub Actions
+        $ip = (Invoke-RestMethod -Uri "https://api.ipify.org")
+        
+        Write-Host "=========================================================="
+        Write-Host "KONEKSIKAN RDP LU MENGGUNAKAN IP ANGKA DI BAWAH INI:"
+        Write-Host "👉 $ip:3389 👈"
+        Write-Host "=========================================================="
+        
+        # Jalankan emulator Windows 11
+        & "C:\Program Files\qemu\qemu-system-x64.exe" -m 8G -smp 4 -boot d -cdrom win11.iso -hda win11.qcow2 -device usb-mouse -show-cursor -net nic,model=e1000 -net user,hostfwd=tcp::3389-:3389 -vnc :1
+        
+        $loop = $true
+        while($loop) {
+          Start-Sleep -Seconds 60
+        }
+      shell: pwsh
